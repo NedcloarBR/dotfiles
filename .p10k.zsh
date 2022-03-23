@@ -38,6 +38,7 @@
     # =========================[ Line #2 ]=========================
     newline                 # \n
     ram                     # free ram
+    load                    # CPU load
     # =========================[ Line #3 ]=========================
     newline                 # \n
     prompt_char             # prompt symbol
@@ -49,7 +50,6 @@
   # last prompt line gets hidden if it would overlap with left prompt.
   typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(
     # =========================[ Line #1 ]=========================
-    date
     status                  # exit code of the last command
     command_execution_time  # duration of the last command
     background_jobs         # presence of background jobs
@@ -91,13 +91,13 @@
     nix_shell               # nix shell (https://nixos.org/nixos/nix-pills/developing-with-nix-shell.html)
     vi_mode                 # vi mode (you don't need this if you've enabled prompt_char)
     # vpn_ip                # virtual private network indicator
-    # load                  # CPU load
     # disk_usage            # disk usage
     # ram                   # free RAM
     # swap                  # used swap
     todo                    # todo items (https://github.com/todotxt/todo.txt-cli)
     timewarrior             # timewarrior tracking status (https://timewarrior.net/)
     taskwarrior             # taskwarrior task count (https://taskwarrior.org/)
+    date
     time                    # current time
     # =========================[ Line #2 ]=========================
     newline                 # \n
@@ -109,7 +109,6 @@
     laravel_version         # laravel php framework version (https://laravel.com/)
     java_version            # java version (https://www.java.com/)
     package                 # name@version from package.json (https://docs.npmjs.com/files/package.json)
-    context
     # ip                    # ip address and bandwidth usage for a specified network interface
     # public_ip             # public IP address
     # proxy                 # system-wide http/https/ftp proxy
