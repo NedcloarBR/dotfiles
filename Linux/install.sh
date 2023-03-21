@@ -27,6 +27,9 @@ nvm install Gallium # v16.19.0
 nvm install Hydrogen # v18.14.0
 nvm install node # v19.6.0 (latest in 16/02/2023 - 20:00)  DD/MM/YYYY - UTC-3
 
+# Install and configure Docker
+curl -o- -fsSL https://get.docker.com | bash
+
 # Install anc configure Java with SDKMan
 curl -s "https://get.sdkman.io" | bash
 source "$HOME/.sdkman/bin/sdkman-init.sh"
