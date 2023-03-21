@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Update System
 sudo apt update  -y && sudo apt upgrade -y
@@ -22,12 +22,12 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:
 git clone https://github.com/zsh-users/zsh-completions ${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions
 
 # Install and configure NodeJS with nvm
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | zsh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
 nvm install Gallium # v16.19.0
 nvm install Hydrogen # v18.14.0
 nvm install node # v19.6.0 (latest in 16/02/2023 - 20:00)  DD/MM/YYYY - UTC-3
 
-
 # Install anc configure Java with SDKMan
-curl -s "https://get.sdkman.io" | zsh
+curl -s "https://get.sdkman.io" | bash
+source "$HOME/.sdkman/bin/sdkman-init.sh"
 sdk install java 19.0.2-oracle
