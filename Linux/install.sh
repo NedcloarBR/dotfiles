@@ -46,3 +46,12 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
 sudo apt-get install libssl-dev pkg-config -y
 cargo install cargo-watch cargo-modules cargo-nextest cargo-make cargo-release cargo-edit cargo-audit cargo-tarpaulin
+
+# Install and configure pyenv
+sudo apt install libedit-dev zlib1g zlib1g-dev libssl-dev libbz2-dev libsqlite3-dev -y
+curl https://pyenv.run | bash
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+pyenv install 2.7.18
+pyenv install 3.11.2
