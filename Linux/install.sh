@@ -35,6 +35,13 @@ nvm install node # v19.6.0 (latest in 16/02/2023 - 20:00)  DD/MM/YYYY - UTC-3
 
 # Install and configure Docker
 curl -o- -fsSL https://get.docker.com | bash
+sudo groupadd docker
+sudo usermod -aG docker $USER
+newgrp docker
+sudo chown "$USER":"$USER" /home/"$USER"/.docker -R
+sudo chmod g+rwx "$HOME/.docker" -R
+sudo systemctl enable docker.service
+sudo systemctl enable containerd.service
 
 # Install and configure Java with SDKMan
 curl -o- -s -fsSL "https://get.sdkman.io" | bash
