@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# TODO: Remove sudo Requirement => Create a new User with the required perms in system to execute the commands then exclude this ScriptUser
+# TODO: Improved Menu => Better Descriptions for each Option, Menu likes VIM/Nano
+# TODO: More Options
+
 if [[ $EUID -ne 0 ]]; then
   echo "This script must be run as root(sudo)"
   exit 1
@@ -129,7 +133,7 @@ Izsh() {
   chsh -s /bin/zsh -y
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended &&
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git $ &
-  {ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k &
+  ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom/themes/powerlevel10k &
   git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions &
   git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting &
   git clone https://github.com/zsh-users/zsh-completions ${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions &&
