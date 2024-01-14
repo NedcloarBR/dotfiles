@@ -1,3 +1,178 @@
 {
-	// Settings
+  // Window
+  "window.zoomLevel": 0,
+  "window.commandCenter": false,
+  "window.titleBarStyle": "custom",
+
+  // Workbench
+  "workbench.iconTheme": "material-icon-theme",
+  "workbench.colorTheme": "Dracula",
+  "workbench.startupEditor": "newUntitledFile",
+  "workbench.editor.labelFormat": "short",
+  "workbench.activityBar.location": "hidden",
+  "workbench.layoutControl.enabled": false,
+  
+  // Editor
+  "editor.tabSize": 2,
+  "editor.rulers": [80, 120],
+  "editor.detectIndentation": false,
+  "editor.inlayHints.fontFamily": "FiraCode Nerd Font",
+  "editor.fontFamily": "FiraCode Nerd Font",
+  "editor.codeLensFontFamily": "FiraCode Nerd Font",
+  "editor.fontLigatures": true,
+  "editor.fontSize": 14,
+  "editor.lineHeight": 0,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+  "editor.guides.bracketPairsHorizontal": true,
+  "editor.minimap.enabled": false,
+  "editor.scrollbar.vertical": "hidden",
+  "editor.scrollbar.horizontal": "hidden",
+  "editor.wordWrap": "on",
+  "editor.inlineSuggest.enabled": true,
+  "editor.semanticHighlighting.enabled": false,
+  "editor.formatOnSave": true,
+  "editor.unicodeHighlight.nonBasicASCII": false,
+  "editor.suggestSelection": "first",
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+
+  // Explorer
+  "explorer.compactFolders": false,
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "package.json": "yarn.lock, package-lock*, pnpm-lock*, bun.lockb",
+    "tsconfig.json": "tsconfig*",
+    ".env": ".env*"
+  },
+
+  // Breadcrumps
+  "breadcrumbs.enabled": false,
+
+  // Files
+  "files.exclude": {
+    "**/.classpath": true,
+    "**/.factorypath": true,
+    "**/.project": true,
+    "**/.settings": true,
+    "**/dist": false,
+    "**/node_modules": true
+  },
+
+  // Per Language
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma",
+    "editor.formatOnSave": true
+  },
+
+  "[c|cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.formatOnSave": true
+  },
+  "cmake.additionalKits": [],
+  "cmake.configureOnOpen": true,
+  "C_Cpp.autocompleteAddParentheses": true,
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.autocomplete": "default",
+
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+
+  "[python]": {
+    "editor.formatOnType": true
+  },
+
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
+
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format"
+  },
+
+  "[java]": {
+    "editor.defaultFormatter": "redhat.java"
+  },
+
+  
+
+  // Terminal
+  "terminal.explorerKind": "external",
+  "terminal.integrated.fontFamily": "FiraCode Nerd Font",
+  "terminal.integrated.env.linux": {},
+  "terminal.integrated.env.windows": {},
+
+  // Security
+  "security.workspace.trust.untrustedFiles": "open",
+
+  // Extensions
+  "material-icon-theme.activeIconPack": "nest",
+  "material-icon-theme.folders.associations": {
+    "adapters": "contract",
+    "kube": "kubernetes",
+    "main": "lib",
+    "websockets": "pipe",
+    "implementations": "core",
+    "protos": "pipe",
+    "entities": "class",
+    "kafka": "pipe",
+    "use-cases": "functions",
+    "migrations": "tools",
+    "schemas": "class",
+    "useCases": "functions",
+    "eslint-config": "tools",
+    "typeorm": "database",
+    "_shared": "shared",
+    "mappers": "meta",
+    "fakes": "mock",
+    "subscribers": "messages",
+    "domain": "class",
+    "protocols": "contract",
+    "infra": "app",
+    "view-models": "views",
+    "presentation": "template",
+    "dtos": "typescript",
+    "http": "container",
+    "providers": "include",
+    "factories": "class",
+    "repositories": "mappings"
+  },
+  "material-icon-theme.files.associations": {},
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.terminalAuthentication": false,
+  "errorLens.excludeBySource": ["ts(2339)"],
+  "codesnap.showWindowTitle": true,
+  "codesnap.containerPadding": "0",
+  "codesnap.roundedCorners": false,
+  "console-ninja.featureSet": "Community",
+  "redhat.telemetry.enabled": true,
+  "emmet.includeLanguages": {
+    "javascript": "javascriptreact"
+  },
+  "tailwindCSS.emmetCompletions": true,
+  "git.openRepositoryInParentFolders": "never",
+  "diffEditor.ignoreTrimWhitespace": false,
+  "biome_lsp.trace.server": "verbose",
+  "cSpell.language": "en, pt-BR",
+  "cSpell.userWords": [],
+  "apc.electron": {}
 }
