@@ -1,0 +1,16 @@
+{
+  "name": "plugins-scrapper",
+  "packageManager": "yarn@4.6.0",
+  "scripts": {
+    "dev": "tsx --watch --env-file=.env src/server.ts"
+  },
+  "dependencies": {
+    "selenium-webdriver": "^4.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/selenium-webdriver": "^4.1.27",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
