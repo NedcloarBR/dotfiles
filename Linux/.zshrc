@@ -18,13 +18,6 @@ source "$HOME/.cargo/env"
 
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-  while true; do
-    git fetch --all --prune
-    sleep 60
-  done
-fi
-
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
