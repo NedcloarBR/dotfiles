@@ -9,8 +9,6 @@ load-nvmrc() {
       echo "⚠️ Version $node_version not installed, using latest version."
       nvm use node > /dev/null
     fi
-  else
-    nvm use node > /dev/null
   fi
 }
 
