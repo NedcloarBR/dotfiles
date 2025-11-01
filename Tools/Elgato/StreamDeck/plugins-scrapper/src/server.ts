@@ -111,7 +111,9 @@ import {
     const installPluginButton = page.locator(`xpath=//button[contains(@class, '${installPluginOrConfirmLoginButtonsClassName}')]`).first();
 
     await installPluginButton.waitFor({ state: 'visible', timeout: 10000 });
-    
+    const pluginNameElement = page.locator(`xpath=//h2[contains(@class, '${pluginNameClassName}')]`).first();
+    const pluginName = await pluginNameElement.innerText();
+    console.info(`Preparing to install plugin: ${pluginName}`);
     console.info("Waiting for 'Open in Stream Deck' button...");
     await page.waitForFunction(
       () => {
@@ -122,6 +124,7 @@ import {
     );
     
     console.info("Clicking install button...");
+
     await installPluginButton.click();
     
     console.info("Plugin installation triggered, waiting...");
@@ -146,8 +149,7 @@ import {
   } finally {
     console.info("Closing browser...");
     await context.close();
-    
-    // Limpar diretório temporário userData
+
     try {
       fs.rmSync(userDataDir, { recursive: true, force: true });
       console.info("UserData directory cleaned up");
