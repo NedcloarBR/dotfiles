@@ -328,6 +328,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"chalk@npm:^5.6.2":
+  version: 5.6.2
+  resolution: "chalk@npm:5.6.2"
+  checksum: 10c0/99a4b0f0e7991796b1e7e3f52dceb9137cae2a9dfc8fc0784a550dc4c558e15ab32ed70b14b21b52beb2679b4892b41a0aa44249bcb996f01e125d58477c6976
+  languageName: node
+  linkType: hard
+
 "chownr@npm:^3.0.0":
   version: 3.0.0
   resolution: "chownr@npm:3.0.0"
@@ -380,6 +387,19 @@ __metadata:
   checksum: 10c0/26f364ebcdb6395f95124fda411f63137a4bfb5d3a06453f7f23dfe52502905bd84e0488172e0f9ec295fdc45f05c23d5d91baf16bd26f0fe9acd777a188dc39
   languageName: node
   linkType: hard
+
+"elgato-streamdeck-plugins-scraper@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "elgato-streamdeck-plugins-scraper@workspace:."
+  dependencies:
+    "@types/node": "npm:^22.10.2"
+    chalk: "npm:^5.6.2"
+    playwright: "npm:1.52.0"
+    rebrowser-playwright: "npm:^1.52.0"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
 
 "emoji-regex@npm:^8.0.0":
   version: 8.0.0
@@ -925,18 +945,6 @@ __metadata:
   checksum: 10c0/2c6edf1e15e59bbaf77f3fa0fe0ac975793c17cff835d9c8b8bc6395a3b6f1c01898b3058ab37891b2e4d424bcc8f1b4844fe70d943e0143d239d7451408c579
   languageName: node
   linkType: hard
-
-"plugins-scrapper@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "plugins-scrapper@workspace:."
-  dependencies:
-    "@types/node": "npm:^22.10.2"
-    playwright: "npm:1.52.0"
-    rebrowser-playwright: "npm:^1.52.0"
-    tsx: "npm:^4.19.2"
-    typescript: "npm:^5.7.2"
-  languageName: unknown
-  linkType: soft
 
 "proc-log@npm:^5.0.0":
   version: 5.0.0
