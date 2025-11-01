@@ -1,0 +1,9 @@
+{
+  "protocol_handler": {
+    "allowed_origin_protocol_pairs": {
+      "https://marketplace.elgato.com": {
+        "streamdeck": true
+      }
+    }
+  }
+}

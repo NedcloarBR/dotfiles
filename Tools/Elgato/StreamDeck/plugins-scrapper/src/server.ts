@@ -1,4 +1,7 @@
 import playwright from "rebrowser-playwright";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import {
   cookiesButtonId,
   installPluginOrConfirmLoginButtonsClassName,
@@ -17,9 +20,21 @@ import {
     process.exit(1);
   }
 
-  console.info("Starting the Playwright browser");
-  const browser = await playwright.chromium.launch({
+  const userDataDir = path.join(os.tmpdir(), 'playwright-streamdeck-' + Date.now());
+  const preferencesDir = path.join(userDataDir, 'Default');
+  fs.mkdirSync(preferencesDir, { recursive: true });
+  
+  const preferencesSourcePath = path.join(__dirname, 'context', 'Preferences');
+  const preferencesDestPath = path.join(preferencesDir, 'Preferences');
+  fs.copyFileSync(preferencesSourcePath, preferencesDestPath);
+  
+  console.info(`UserData directory created at: ${userDataDir}`);
+  console.info("Starting the Playwright browser with persistent context");
+  
+  const context = await playwright.chromium.launchPersistentContext(userDataDir, {
     headless: process.env.HEADLESS !== 'false',
+    viewport: { width: 1200, height: 800 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     args: [
         '--no-sandbox',
         '--mute-audio',
@@ -31,13 +46,8 @@ import {
         '--ignore-ssl-errors'
     ]
   });
-  
-  const context = await browser.newContext({
-    viewport: { width: 1200, height: 800 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  });
 
-  const page = await context.newPage();
+  const page = context.pages()[0] || await context.newPage();
   
   page.on('pageerror', error => {
     console.error('Page error:', error);
@@ -135,6 +145,14 @@ import {
     console.error("Fatal error:", error);
   } finally {
     console.info("Closing browser...");
-    await browser.close();
+    await context.close();
+    
+    // Limpar diretório temporário userData
+    try {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      console.info("UserData directory cleaned up");
+    } catch (error) {
+      console.warn("Failed to clean up userData directory:", error);
+    }
   }
 })();
