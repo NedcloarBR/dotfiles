@@ -39,6 +39,7 @@ readonly OPT_JAVA="Install SDKMan! (Java Version Manager) - (Optional)"
 readonly OPT_RUST="Install Rust + Cargo Plugins - (Optional)"
 readonly OPT_PYTHON="Install PyEnv (Python Version Manager) - (Optional)"
 readonly OPT_GHCLI="Install GitHub CLI - (Optional)"
+readonly OPT_DOTFILES="Install ZSH Dotfiles from repository - (Optional)"
 
 # ==============================================================================
 # GLOBAL VARIABLES
@@ -58,6 +59,7 @@ OPTIONS=(
   "$OPT_RUST"
   "$OPT_PYTHON"
   "$OPT_GHCLI"
+  "$OPT_DOTFILES"
 )
 
 selected=()
@@ -318,6 +320,60 @@ install_github_cli() {
   log_info "Run 'gh auth login' to authenticate with your GitHub account"
 }
 
+install_dotfiles() {
+  log_info "Installing ZSH dotfiles from repository..."
+  
+  local tmp_dir="/tmp/dotfiles-install-$$"
+  local repo_url="https://github.com/NedcloarBR/dotfiles.git"
+  
+  # Clone repository to temp directory
+  log_info "Cloning repository..."
+  run_as_user git clone --depth=1 "$repo_url" "$tmp_dir"
+  
+  if [[ ! -d "$tmp_dir/Linux" ]]; then
+    log_error "Could not find Linux directory in repository"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+  
+  # Copy dotfiles to user's home directory
+  log_info "Copying dotfiles to ${ACTUAL_HOME}..."
+  
+  local dotfiles=(
+    ".zshrc"
+    ".p10k.zsh"
+    ".aliases.zsh"
+    ".functions.zsh"
+    ".hooks.zsh"
+    ".plugins.zsh"
+    ".programs.zsh"
+  )
+  
+  for dotfile in "${dotfiles[@]}"; do
+    if [[ -f "$tmp_dir/Linux/$dotfile" ]]; then
+      # Backup existing file if it exists
+      if [[ -f "${ACTUAL_HOME}/$dotfile" ]]; then
+        log_warning "Backing up existing $dotfile to ${dotfile}.backup"
+        run_as_user mv "${ACTUAL_HOME}/$dotfile" "${ACTUAL_HOME}/${dotfile}.backup"
+      fi
+      
+      # Copy new dotfile
+      run_as_user cp "$tmp_dir/Linux/$dotfile" "${ACTUAL_HOME}/$dotfile"
+      log_info "Installed $dotfile"
+    else
+      log_warning "$dotfile not found in repository"
+    fi
+  done
+  
+  # Clean up temporary directory
+  log_info "Cleaning up temporary files..."
+  rm -rf "$tmp_dir"
+  
+  log_success "Dotfiles were installed!"
+  log_info "Backup files were created with .backup extension"
+  log_info "Please restart your terminal or run 'source ~/.zshrc' to apply changes"
+}
+
 install_qemu() {
   if is_wsl; then
     log_warning "QEMU/KVM is not supported on WSL."
@@ -518,6 +574,9 @@ run_selected_installations() {
         ;;
       "$OPT_GHCLI")
         install_github_cli
+        ;;
+      "$OPT_DOTFILES")
+        install_dotfiles
         ;;
     esac
   done
