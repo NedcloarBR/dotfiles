@@ -593,6 +593,33 @@ main() {
     exit 1
   fi
 
+  # Check system architecture
+  local arch
+  arch=$(uname -m)
+  
+  case "$arch" in
+    x86_64|amd64)
+      # Supported architectures
+      ;;
+    aarch64|arm64|armv7l|armv8*)
+      log_error "This script does not support ARM/AARCH64 architecture"
+      log_error "Your architecture: $arch"
+      log_info "Please install tools manually or use architecture-specific installation methods"
+      exit 1
+      ;;
+    *)
+      log_warning "Unsupported or unknown architecture: $arch"
+      log_warning "This script is designed for x86_64/amd64 systems"
+      echo ""
+      read -n 1 -p "Continue anyway? [y/N]: " choice
+      echo ""
+      case "$choice" in
+        [Yy]) log_info "Continuing installation at your own risk..." ;;
+        *) log_info "Installation canceled"; exit 1 ;;
+      esac
+      ;;
+  esac
+
   # Setup terminal
   tput civis
   trap 'restore_terminal' EXIT INT TERM
