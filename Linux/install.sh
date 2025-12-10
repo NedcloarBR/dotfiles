@@ -189,21 +189,21 @@ navigate_down() {
 handle_input() {
   local key k1 k2
   
-  IFS= read -r -sn1 key || true
+  IFS= read -rsn1 key 2>/dev/null || true
   
   # Handle escape sequences (arrow keys)
   if [[ "$key" == $'\x1b' ]]; then
-    read -r -sn1 -t 0.1 k1 || true
-    read -r -sn1 -t 0.1 k2 || true
+    read -rsn1 -t 0.1 k1 2>/dev/null || true
+    read -rsn1 -t 0.1 k2 2>/dev/null || true
     key="${k1}${k2}"
   fi
 
   case "$key" in
-    " ")        toggle_selection ;;
+    " ")        toggle_selection; return 0 ;;
     "")         return 1 ;;  # Enter - exit loop and run
     'q' | 'Q')  return 2 ;;  # Quit
-    '[A' | 'k') navigate_up ;;
-    '[B' | 'j') navigate_down ;;
+    '[A' | 'k') navigate_up; return 0 ;;
+    '[B' | 'j') navigate_down; return 0 ;;
   esac
   
   return 0
@@ -229,7 +229,8 @@ install_zsh() {
   log_info "Installing ZSH and plugins..."
   apt install zsh -y
   
-  chsh -s /bin/zsh "$ACTUAL_USER"
+  # Set ZSH as default shell for the actual user
+  chsh -s "$(which zsh)" "$ACTUAL_USER"
   
   run_as_user sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
   
@@ -537,12 +538,16 @@ main() {
   tput civis
   trap 'restore_terminal' EXIT INT TERM
   
-  # Main loop
+  # Main loop - temporarily disable errexit for handle_input
+  set +e
   while true; do
     draw_menu
     
-    if ! handle_input; then
-      local exit_code=$?
+    handle_input
+    local exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
+      set -e
       restore_terminal
       tput clear
       
