@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "sonnet",
+  "effortLevel": "medium",
+  "autoScrollEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "includeCoAuthoredBy": false,
+  "includeGitInstructions": true,
+  "respectGitignore": true,
+  "showTurnDuration": true,
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline-command.sh",
+    "padding": 0,
+    "refreshInterval": 1
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(which *)",
+      "Bash(node *)",
+      "Bash(pnpm *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(bun *)",
+      "Bash(python3 *)",
+      "Bash(go *)",
+      "Bash(cargo *)",
+      "Bash(jq *)",
+      "Bash(bash -n *)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "-c",
+              "printf '\\a' 2>/dev/null; notify-send -t 4000 'Claude Code' 'Response Finished' 2>/dev/null; true"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "~/.claude/hooks/pre-bash-guard.sh"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "~/.claude/hooks/post-edit-format.sh"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "~/.claude/hooks/post-edit-format.sh"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(pnpm install*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "-c",
+              "notify-send -t 3000 'Claude Code' 'pnpm install done' 2>/dev/null; true"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(yarn install*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "-c",
+              "notify-send -t 3000 'Claude Code' 'yarn install done' 2>/dev/null; true"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "enabledPlugins": {
+    "playwright@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true
+  }
+}
