@@ -39,6 +39,8 @@ readonly OPT_JAVA="Install SDKMan! (Java Version Manager) - (Optional)"
 readonly OPT_RUST="Install Rust + Cargo Plugins - (Optional)"
 readonly OPT_PYTHON="Install PyEnv (Python Version Manager) - (Optional)"
 readonly OPT_GHCLI="Install GitHub CLI - (Optional)"
+readonly OPT_REMOVE_SNAP="Remove Snap completely + block reinstall - (Optional, Linux only)"
+readonly OPT_FLATPAK="Install Flatpak + Flathub & Software Center - (Optional, Linux only)"
 readonly OPT_DOTFILES="Install ZSH Dotfiles from repository - (Optional)"
 
 # ==============================================================================
@@ -59,6 +61,8 @@ OPTIONS=(
   "$OPT_RUST"
   "$OPT_PYTHON"
   "$OPT_GHCLI"
+  "$OPT_REMOVE_SNAP"
+  "$OPT_FLATPAK"
   "$OPT_DOTFILES"
 )
 
@@ -92,6 +96,40 @@ is_wsl() {
     *Microsoft*) return 0 ;; # WSL 1
     *) return 1 ;;
   esac
+}
+
+# Detect if the distro is Ubuntu (or an Ubuntu derivative)
+is_ubuntu() {
+  [[ -r /etc/os-release ]] || return 1
+  local id id_like
+  id=$(. /etc/os-release && echo "${ID:-}")
+  id_like=$(. /etc/os-release && echo "${ID_LIKE:-}")
+  [[ "$id" == "ubuntu" ]] || [[ "$id_like" == *ubuntu* ]]
+}
+
+# Detect installed desktop environment: gnome | kde | none
+detect_desktop() {
+  if dpkg -s gnome-shell &>/dev/null; then
+    echo "gnome"
+  elif dpkg -s plasma-desktop &>/dev/null || dpkg -s plasma-workspace &>/dev/null; then
+    echo "kde"
+  else
+    echo "none"
+  fi
+}
+
+# Ask a yes/no question, returns 0 for yes
+confirm() {
+  local prompt="$1" choice
+  while true; do
+    read -n 1 -p "$prompt [y/N]: " choice
+    echo ""
+    case "$choice" in
+      [Yy]) return 0 ;;
+      [Nn] | "") return 1 ;;
+      *) log_warning "Please enter 'y' or 'n'" ;;
+    esac
+  done
 }
 
 # Restore terminal to normal state
@@ -523,6 +561,183 @@ install_docker_desktop() {
   log_info "You may need to log out and log back in for changes to take effect"
 }
 
+# ------------------------------------------------------------------------------
+# Snap Removal
+# ------------------------------------------------------------------------------
+
+remove_all_snaps() {
+  command_exists snap || return 0
+
+  log_info "Removing installed snap packages..."
+
+  # Multiple passes: apps first, then bases/core they depend on
+  local pass snaps snap_name
+  for pass in 1 2 3; do
+    mapfile -t snaps < <(snap list --all 2>/dev/null | awk 'NR>1 && $1 != "snapd" { print $1 }' | sort -u)
+    [[ ${#snaps[@]} -eq 0 ]] && break
+
+    for snap_name in "${snaps[@]}"; do
+      log_info "Removing snap: ${snap_name}"
+      snap remove --purge "$snap_name" &>/dev/null || true
+    done
+  done
+
+  snap remove --purge snapd &>/dev/null || true
+}
+
+block_snapd_reinstall() {
+  log_info "Blocking snapd from being reinstalled..."
+
+  apt-mark hold snapd &>/dev/null || true
+
+  cat > /etc/apt/preferences.d/nosnap.pref <<'EOF'
+# Prevent snapd from being installed as a dependency
+Package: snapd
+Pin: release a=*
+Pin-Priority: -10
+EOF
+
+  log_success "snapd is now pinned with priority -10"
+}
+
+install_firefox_deb() {
+  log_info "Adding Mozilla APT repository..."
+
+  install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://packages.mozilla.org/apt/repo-signing-key.gpg -o /etc/apt/keyrings/packages.mozilla.org.asc
+  chmod go+r /etc/apt/keyrings/packages.mozilla.org.asc
+
+  echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" \
+    > /etc/apt/sources.list.d/mozilla.list
+
+  # Ensure the Mozilla build wins over Ubuntu's snap transitional package
+  cat > /etc/apt/preferences.d/mozilla.pref <<'EOF'
+Package: *
+Pin: origin packages.mozilla.org
+Pin-Priority: 1000
+EOF
+
+  apt update
+  apt install firefox -y
+
+  log_success "Firefox (deb) was installed from the Mozilla repository!"
+}
+
+remove_snap() {
+  if is_wsl; then
+    log_warning "Snap is not supported on WSL - nothing to remove."
+    return
+  fi
+
+  echo ""
+  log_warning "This will PERMANENTLY remove snapd and ALL installed snap packages."
+  log_warning "Snap application data under /var/snap and ~/snap will be deleted."
+
+  if command_exists snap; then
+    echo ""
+    echo -e "${CYAN}Currently installed snaps:${NC}"
+    snap list 2>/dev/null || log_info "(none)"
+  else
+    log_info "snapd is not installed - only the reinstall block will be applied."
+  fi
+
+  echo ""
+  if ! confirm "Continue with complete Snap removal?"; then
+    log_info "Snap removal canceled"
+    return
+  fi
+
+  # Ubuntu ships Firefox/Thunderbird only as snaps
+  local install_firefox=false
+  if is_ubuntu && snap list firefox &>/dev/null; then
+    echo ""
+    log_warning "Firefox on Ubuntu is a snap and will be removed."
+    confirm "Install Firefox as a native deb (Mozilla repository) afterwards?" && install_firefox=true
+  fi
+
+  remove_all_snaps
+
+  log_info "Stopping snapd services..."
+  systemctl stop snapd.socket snapd.service snapd.seeded.service &>/dev/null || true
+  systemctl disable snapd.socket snapd.service snapd.seeded.service &>/dev/null || true
+
+  log_info "Unmounting leftover snap mounts..."
+  local mount_point
+  while read -r mount_point; do
+    umount -l "$mount_point" &>/dev/null || true
+  done < <(mount | awk '$3 ~ "^/snap" { print $3 }' | sort -r)
+
+  log_info "Purging snapd package..."
+  apt purge snapd -y &>/dev/null || true
+  apt autoremove --purge -y &>/dev/null || true
+
+  log_info "Removing leftover snap directories..."
+  rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd /root/snap
+  rm -rf "${ACTUAL_HOME}/snap"
+
+  block_snapd_reinstall
+
+  [[ "$install_firefox" == true ]] && install_firefox_deb
+
+  log_success "Snap was completely removed!"
+  log_info "To undo the block: sudo apt-mark unhold snapd && sudo rm /etc/apt/preferences.d/nosnap.pref"
+}
+
+# ------------------------------------------------------------------------------
+# Flatpak Installation
+# ------------------------------------------------------------------------------
+
+readonly FLATHUB_REPO="https://dl.flathub.org/repo/flathub.flatpakrepo"
+
+install_flatpak_store() {
+  local desktop
+  desktop=$(detect_desktop)
+
+  case "$desktop" in
+    gnome)
+      log_info "GNOME detected - installing GNOME Software with Flatpak support..."
+      # On Ubuntu the App Center is a snap; the deb GNOME Software replaces it
+      apt install gnome-software gnome-software-plugin-flatpak -y
+      if is_ubuntu; then
+        log_success "GNOME Software (Ubuntu store) now lists Flatpak applications!"
+      fi
+      ;;
+    kde)
+      log_info "KDE detected - installing Discover with Flatpak support..."
+      apt install plasma-discover plasma-discover-backend-flatpak -y
+      log_success "Discover now lists Flatpak applications!"
+      ;;
+    *)
+      log_warning "No supported desktop environment detected - skipping store integration"
+      log_info "Flatpak apps can still be installed with 'flatpak install <app>'"
+      ;;
+  esac
+}
+
+install_flatpak() {
+  if is_wsl; then
+    log_warning "WSL DETECTED: Flatpak GUI apps require a working WSLg setup."
+    confirm "Continue with Flatpak installation anyway?" || { log_info "Flatpak installation canceled"; return; }
+  fi
+
+  log_info "Installing Flatpak..."
+  apt install flatpak -y
+
+  log_info "Adding Flathub remote (system-wide)..."
+  flatpak remote-add --if-not-exists flathub "$FLATHUB_REPO"
+
+  log_info "Adding Flathub remote (user)..."
+  run_as_user env HOME="$ACTUAL_HOME" flatpak remote-add --user --if-not-exists flathub "$FLATHUB_REPO" || true
+
+  if ! is_wsl; then
+    install_flatpak_store
+  fi
+
+  log_success "Flatpak was installed!"
+  log_info "Log out and log back in so Flatpak apps appear in your application menu"
+  log_info "Usage: flatpak install flathub <app-id>"
+}
+
 # ==============================================================================
 # MAIN EXECUTION
 # ==============================================================================
@@ -535,7 +750,10 @@ run_selected_installations() {
 
   echo -e "\n${BOLD}${CYAN}Starting installation...${NC}\n"
   
-  for option in "${selected[@]}"; do
+  # Iterate in menu order, not selection order, to keep dependencies consistent
+  for option in "${OPTIONS[@]}"; do
+    [[ " ${selected[*]} " =~ " $option " ]] || continue
+
     case "$option" in
       "$OPT_UPDATE")
         install_update
@@ -574,6 +792,12 @@ run_selected_installations() {
         ;;
       "$OPT_GHCLI")
         install_github_cli
+        ;;
+      "$OPT_REMOVE_SNAP")
+        remove_snap
+        ;;
+      "$OPT_FLATPAK")
+        install_flatpak
         ;;
       "$OPT_DOTFILES")
         install_dotfiles
