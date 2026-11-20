@@ -1,52 +1,132 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "model": "sonnet",
+  "model": "opus",
   "effortLevel": "medium",
-  "autoScrollEnabled": true,
-  "skipAutoPermissionPrompt": true,
-  "includeCoAuthoredBy": false,
-  "includeGitInstructions": true,
   "respectGitignore": true,
-  "showTurnDuration": true,
-  "statusLine": {
-    "type": "command",
-    "command": "bash ~/.claude/statusline-command.sh",
-    "padding": 0,
-    "refreshInterval": 1
+  "cleanupPeriodDays": 30,
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
   },
+  "includeGitInstructions": true,
+  "disableClaudeAiConnectors": true,
+  "deniedMcpServers": [
+    {
+      "serverName": "agentic-controller"
+    }
+  ],
   "permissions": {
     "allow": [
       "Bash(git *)",
       "Bash(ls *)",
       "Bash(find *)",
       "Bash(grep *)",
+      "Bash(rg *)",
       "Bash(cat *)",
-      "Bash(echo *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(diff *)",
+      "Bash(tree *)",
       "Bash(which *)",
+      "Bash(jq *)",
+      "Bash(bash -n *)",
       "Bash(node *)",
       "Bash(pnpm *)",
+      "Bash(yarn *)",
       "Bash(npm *)",
       "Bash(npx *)",
       "Bash(bun *)",
       "Bash(python3 *)",
       "Bash(go *)",
       "Bash(cargo *)",
-      "Bash(jq *)",
-      "Bash(bash -n *)"
+      "Bash(docker ps *)",
+      "Bash(docker logs *)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list *)",
+      "Bash(rtk git *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk find *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk rg *)",
+      "Bash(rtk cat *)",
+      "Bash(rtk head *)",
+      "Bash(rtk tail *)",
+      "Bash(rtk wc *)",
+      "Bash(rtk diff *)",
+      "Bash(rtk tree *)",
+      "Bash(rtk which *)",
+      "Bash(rtk jq *)",
+      "Bash(rtk bash -n *)",
+      "Bash(rtk node *)",
+      "Bash(rtk pnpm *)",
+      "Bash(rtk yarn *)",
+      "Bash(rtk npm *)",
+      "Bash(rtk npx *)",
+      "Bash(rtk bun *)",
+      "Bash(rtk python3 *)",
+      "Bash(rtk go *)",
+      "Bash(rtk cargo *)",
+      "Bash(rtk docker ps *)",
+      "Bash(rtk docker logs *)",
+      "Bash(rtk docker compose ps *)",
+      "Bash(rtk docker compose logs *)",
+      "Bash(rtk gh pr view *)",
+      "Bash(rtk gh pr list *)",
+      "Bash(rtk gh pr diff *)",
+      "Bash(rtk gh pr checks *)",
+      "Bash(rtk gh issue view *)",
+      "Bash(rtk gh issue list *)",
+      "Bash(rtk gh run view *)",
+      "Bash(rtk gh run list *)"
     ],
-    "deny": []
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.claude/.credentials.json)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(git branch -D *)",
+      "Bash(git checkout -- *)",
+      "Bash(git restore *)",
+      "Bash(find * -delete*)",
+      "Bash(find * -exec *)",
+      "Bash(rtk git push *)",
+      "Bash(rtk git reset --hard*)",
+      "Bash(rtk git clean *)",
+      "Bash(rtk git branch -D *)",
+      "Bash(rtk git checkout -- *)",
+      "Bash(rtk git restore *)",
+      "Bash(rtk find * -delete*)",
+      "Bash(rtk find * -exec *)"
+    ]
   },
   "hooks": {
-    "Stop": [
+    "SessionStart": [
       {
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
-            "args": [
-              "-c",
-              "printf '\\a' 2>/dev/null; notify-send -t 4000 'Claude Code' 'Response Finished' 2>/dev/null; true"
-            ]
+            "command": "bash \"$HOME/.claude/hooks/session-start-handoff.sh\""
           }
         ]
       }
@@ -57,74 +137,97 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
-            "args": [
-              "~/.claude/hooks/pre-bash-guard.sh"
-            ]
+            "command": "bash \"$HOME/.claude/hooks/pre-bash-guard.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/rtk-rewrite.sh\""
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
-            "args": [
-              "~/.claude/hooks/post-edit-format.sh"
-            ]
+            "command": "bash \"$HOME/.claude/hooks/post-edit-format.sh\""
           }
         ]
       },
       {
-        "matcher": "Write",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
-            "args": [
-              "~/.claude/hooks/post-edit-format.sh"
-            ]
+            "if": "Bash(*pnpm install*)",
+            "async": true,
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\" 'pnpm install done'"
+          },
+          {
+            "type": "command",
+            "if": "Bash(*yarn install*)",
+            "async": true,
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\" 'yarn install done'"
+          },
+          {
+            "type": "command",
+            "if": "Bash(npm install*)",
+            "async": true,
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\" 'npm install done'"
+          },
+          {
+            "type": "command",
+            "if": "Bash(rtk npm install*)",
+            "async": true,
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\" 'npm install done'"
+          },
+          {
+            "type": "command",
+            "if": "Bash(*bun install*)",
+            "async": true,
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\" 'bun install done'"
           }
         ]
-      },
+      }
+    ],
+    "Notification": [
       {
-        "matcher": "Bash(pnpm install*)",
+        "matcher": "permission_prompt|idle_prompt",
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
-            "args": [
-              "-c",
-              "notify-send -t 3000 'Claude Code' 'pnpm install done' 2>/dev/null; true"
-            ]
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\" 'Claude is waiting for you'"
           }
         ]
-      },
+      }
+    ],
+    "Stop": [
       {
-        "matcher": "Bash(yarn install*)",
         "hooks": [
           {
             "type": "command",
-            "command": "bash",
-            "args": [
-              "-c",
-              "notify-send -t 3000 'Claude Code' 'yarn install done' 2>/dev/null; true"
-            ]
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\" 'Response finished'"
           }
         ]
       }
     ]
   },
-  "attribution": {
-    "commit": "",
-    "pr": ""
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"$HOME/.claude/statusline-command.sh\"",
+    "padding": 0,
+    "refreshInterval": 5
   },
   "enabledPlugins": {
-    "playwright@claude-plugins-official": true,
+    "playwright@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true
-  }
+  },
+  "tui": "fullscreen",
+  "autoScrollEnabled": true,
+  "showTurnDuration": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
 }
