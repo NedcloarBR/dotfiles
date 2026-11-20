@@ -1,0 +1,22 @@
+name: claude-config
+
+on:
+  push:
+    paths: ["Tools/.claude/**", ".github/workflows/claude-config.yml"]
+  pull_request:
+    paths: ["Tools/.claude/**", ".github/workflows/claude-config.yml"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate settings.json
+        run: jq empty Tools/.claude/settings.json
+
+      - name: ShellCheck
+        run: shellcheck -S warning Tools/.claude/*.sh Tools/.claude/hooks/*.sh Tools/.claude/tests/*.sh
+
+      - name: Guard tests
+        run: bash Tools/.claude/tests/pre-bash-guard.test.sh
