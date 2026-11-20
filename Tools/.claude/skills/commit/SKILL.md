@@ -1,3 +1,11 @@
+---
+name: commit
+description: Create a Conventional Commit from the current repository changes
+disable-model-invocation: true
+argument-hint: "[scope]"
+allowed-tools: Bash(git status *), Bash(git diff *), Bash(git log *), Bash(git add *), Bash(git commit *)
+---
+
 Analyze the current repository state and create a commit following Conventional Commits.
 
 ## Steps
@@ -14,7 +22,7 @@ type(scope): short description in English
 
 **Types:** `feat`, `fix`, `chore`, `refactor`, `style`, `docs`, `test`, `perf`, `ci`
 
-**Scope:** name of the affected module, feature, or folder (e.g., `auth`, `user`, `docker`, `install`)
+**Scope:** name of the affected module, feature, or folder (e.g., `auth`, `user`, `docker`, `install`). If a scope was passed (`$ARGUMENTS`), use it.
 
 **Rules:**
 - Message in English
