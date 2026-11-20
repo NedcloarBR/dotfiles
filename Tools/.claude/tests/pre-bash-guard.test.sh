@@ -4,7 +4,8 @@
 
 set -uo pipefail
 
-readonly GUARD="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks/pre-bash-guard.sh"
+GUARD="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks/pre-bash-guard.sh"
+readonly GUARD
 HOME="$(mktemp -d)"
 export HOME
 mkdir -p "$HOME/.claude"

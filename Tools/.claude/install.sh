@@ -10,9 +10,11 @@
 
 set -euo pipefail
 
-readonly SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SRC
 readonly DEST="$HOME/.claude"
-readonly BACKUP="$DEST/backups/dotfiles-$(date +%Y%m%d-%H%M%S)"
+BACKUP="$DEST/backups/dotfiles-$(date +%Y%m%d-%H%M%S)"
+readonly BACKUP
 
 readonly RTK_INSTALLER="https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh"
 

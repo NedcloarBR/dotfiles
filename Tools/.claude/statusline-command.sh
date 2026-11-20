@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Variables below come from the jq-generated `eval`, which ShellCheck cannot follow
+# shellcheck disable=SC2154
 
 input=$(cat)
 
@@ -59,7 +61,7 @@ if [ -n "$cwd" ]; then
   staged=$(git -C "$cwd" diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
   modified=$(git -C "$cwd" diff --numstat 2>/dev/null | wc -l | tr -d ' ')
   stash=$(git -C "$cwd" --no-optional-locks stash list 2>/dev/null | wc -l | tr -d ' ')
-  read -r pull push < <(git -C "$cwd" --no-optional-locks rev-list --left-right --count @{upstream}...HEAD 2>/dev/null)
+  read -r pull push < <(git -C "$cwd" --no-optional-locks rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null)
   pull=${pull:-0}; push=${push:-0}
   git_tag=$(git -C "$cwd" --no-optional-locks describe --tags --abbrev=0 2>/dev/null)
 
