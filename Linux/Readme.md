@@ -40,7 +40,6 @@ Linux/WSL
     │   └── Node Latest
     ├── SDKMAN! (Java Software Development Kit Manager)
     │   └── Java 19.0.2 Oracle
-    └── pyenv (Python Version Management)
-        ├── Python 2.7.18
-        └── Python 3.11.2
+    └── uv (Python Version & Package Manager)
+        └── Python Latest
 ``` 

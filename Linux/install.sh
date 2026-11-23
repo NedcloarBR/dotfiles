@@ -37,7 +37,7 @@ readonly OPT_QEMU="Install QEMU + Virtual Machine Manager - (Optional, Linux onl
 readonly OPT_NODEJS="Install NVM (Node Version Manager) - (Optional)"
 readonly OPT_JAVA="Install SDKMan! (Java Version Manager) - (Optional)"
 readonly OPT_RUST="Install Rust + Cargo Plugins - (Optional)"
-readonly OPT_PYTHON="Install PyEnv (Python Version Manager) - (Optional)"
+readonly OPT_PYTHON="Install uv (Python Version & Package Manager) - (Optional)"
 readonly OPT_GHCLI="Install GitHub CLI - (Optional)"
 readonly OPT_REMOVE_SNAP="Remove Snap completely + block reinstall - (Optional, Linux only)"
 readonly OPT_FLATPAK="Install Flatpak + Flathub & Software Center - (Optional, Linux only)"
@@ -326,15 +326,15 @@ install_rust() {
   log_success "Rust + Cargo Plugins were installed!"
 }
 
-install_pyenv() {
-  log_info "Installing PyEnv dependencies..."
-  apt install libedit-dev zlib1g zlib1g-dev libssl-dev libbz2-dev libsqlite3-dev libreadline-dev libffi-dev -y
-  
-  log_info "Installing PyEnv (Latest version)..."
-  run_as_user bash -c 'curl https://pyenv.run | bash'
-  
-  log_success "PyEnv was installed!"
-  log_info "Add pyenv to your shell config and restart terminal"
+install_uv() {
+  log_info "Installing uv (Latest version)..."
+  run_as_user env UV_NO_MODIFY_PATH=1 sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+
+  log_info "Installing latest Python via uv..."
+  run_as_user "${ACTUAL_HOME}/.local/bin/uv" python install
+
+  log_success "uv + Python were installed!"
+  log_info "Make sure ~/.local/bin is in your PATH and restart terminal"
 }
 
 install_github_cli() {
@@ -787,8 +787,8 @@ run_selected_installations() {
         install_rust
         ;;
       "$OPT_PYTHON")
-        ensure_requirements "PyEnv"
-        install_pyenv
+        ensure_requirements "uv"
+        install_uv
         ;;
       "$OPT_GHCLI")
         install_github_cli
