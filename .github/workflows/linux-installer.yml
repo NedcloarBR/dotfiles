@@ -1,0 +1,41 @@
+name: linux-installer
+
+on:
+  push:
+    paths: ["Linux/**", ".github/workflows/linux-installer.yml"]
+  pull_request:
+    paths: ["Linux/**", ".github/workflows/linux-installer.yml"]
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: shellcheck -S warning Linux/install.sh
+
+  install:
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create non-root user
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq sudo
+          useradd -m -s /bin/bash tester
+
+      - name: Install
+        env:
+          SUDO_USER: tester
+        run: ./Linux/install.sh --yes --only zsh,nvm,sdkman,rust,uv,gh,dotfiles
+
+      - name: Re-run (idempotency)
+        env:
+          SUDO_USER: tester
+        run: ./Linux/install.sh --yes --only zsh,dotfiles
+
+      - name: Verify shell loads the tools
+        run: sudo -u tester -H zsh -ic 'command -v node uv gh cargo cargo-nextest && uv python list --only-installed'

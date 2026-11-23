@@ -2,15 +2,27 @@
 
 These are the settings I use in Linux/WSL for my development environment
 <br>
-First of all it is necessary to have cURL installed on your system if you do not have run the command below to install it
+The script needs `bash`, `curl` and root privileges. Download it and run it with `sudo`:
 
 ```zsh
-sudo apt-get install curl
+curl -fsSL https://raw.githubusercontent.com/NedcloarBR/dotfiles/Master/Linux/install.sh -o install.sh
+sudo bash install.sh
 ```
-After installing curl run the following command and the configuration will be done
-```zsh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/NedcloarBR/dotfiles/Master/Linux/install.sh)"
+
+When run from a clone of this repository, the dotfiles are copied from the local checkout; otherwise the repository is cloned.
+
+### Options
+
 ```
+sudo bash install.sh                        # interactive menu
+sudo bash install.sh --all                  # every step except remove-snap
+sudo bash install.sh --only zsh,uv,dotfiles # only the given steps
+sudo bash install.sh --only docker --yes    # answer yes to every prompt
+bash install.sh --list                      # list step names
+```
+
+Failed steps don't stop the others; a summary is shown at the end and the full log is saved to `/var/log/dotfiles-install-<timestamp>.log`.
+Existing dotfiles are backed up as `<file>.backup-<timestamp>`.
 
 #
 ## This script will install on your system the following items
@@ -35,11 +47,12 @@ Linux/WSL
     │   ├── zsh-syntax-highlighting (Plugin)
     │   └── zsh-completions (Plugin)
     ├── nvm (Node Version Manager)
-    │   ├── Node Gallium # v16.19.0
-    │   ├── Node Hydrogen # v18.14.0
-    │   └── Node Latest
+    │   └── Node LTS
     ├── SDKMAN! (Java Software Development Kit Manager)
-    │   └── Java 19.0.2 Oracle
-    └── uv (Python Version & Package Manager)
-        └── Python Latest
+    ├── Rust + Cargo (via rustup)
+    │   └── cargo-watch, cargo-modules, cargo-nextest, cargo-make,
+    │       cargo-release, cargo-edit, cargo-audit, cargo-tarpaulin (via cargo-binstall)
+    ├── uv (Python Version & Package Manager)
+    │   └── Python Latest
+    └── GitHub CLI
 ``` 

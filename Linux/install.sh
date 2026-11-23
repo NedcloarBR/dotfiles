@@ -4,7 +4,8 @@
 # ===================================
 # Interactive menu to install development tools and configurations
 #
-# Usage: sudo ./install.sh
+# Usage: sudo ./install.sh [--all | --only <steps>] [--yes]
+#        ./install.sh --list | --help
 #
 # Navigation:
 #   ↑/↓ or k/j  - Navigate options
@@ -14,6 +15,8 @@
 #
 
 set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
 
 # ==============================================================================
 # CONSTANTS
@@ -28,47 +31,56 @@ readonly CYAN='\033[0;36m'
 readonly NC='\033[0m'
 readonly BOLD='\033[1m'
 
-# Menu Options
-readonly OPT_UPDATE="Update System - (Recommended)"
-readonly OPT_REQUIREMENTS="Install Requirements - (Essential)"
-readonly OPT_ZSH="Install ZSH + Plugins & Theme as default Shell - (Recommended)"
-readonly OPT_DOCKER="Install Docker - (Optional)"
-readonly OPT_QEMU="Install QEMU + Virtual Machine Manager - (Optional, Linux only)"
-readonly OPT_NODEJS="Install NVM (Node Version Manager) - (Optional)"
-readonly OPT_JAVA="Install SDKMan! (Java Version Manager) - (Optional)"
-readonly OPT_RUST="Install Rust + Cargo Plugins - (Optional)"
-readonly OPT_PYTHON="Install uv (Python Version & Package Manager) - (Optional)"
-readonly OPT_GHCLI="Install GitHub CLI - (Optional)"
-readonly OPT_REMOVE_SNAP="Remove Snap completely + block reinstall - (Optional, Linux only)"
-readonly OPT_FLATPAK="Install Flatpak + Flathub & Software Center - (Optional, Linux only)"
-readonly OPT_DOTFILES="Install ZSH Dotfiles from repository - (Optional)"
+# Steps in execution order: key|function|needs requirements (req|-)|menu label
+readonly STEPS=(
+  "update|install_update|-|Update System - (Recommended)"
+  "requirements|install_requirements|-|Install Requirements - (Essential)"
+  "zsh|install_zsh|req|Install ZSH + Plugins & Theme as default Shell - (Recommended)"
+  "docker|install_docker|req|Install Docker - (Optional)"
+  "qemu|install_qemu|-|Install QEMU + Virtual Machine Manager - (Optional, Linux only)"
+  "nvm|install_nvm|req|Install NVM (Node Version Manager) + Node LTS - (Optional)"
+  "sdkman|install_sdkman|req|Install SDKMan! (Java Version Manager) - (Optional)"
+  "rust|install_rust|req|Install Rust + Cargo Plugins - (Optional)"
+  "uv|install_uv|req|Install uv (Python Version & Package Manager) - (Optional)"
+  "gh|install_github_cli|req|Install GitHub CLI - (Optional)"
+  "remove-snap|remove_snap|req|Remove Snap completely + block reinstall - (Optional, Linux only)"
+  "flatpak|install_flatpak|-|Install Flatpak + Flathub & Software Center - (Optional, Linux only)"
+  "dotfiles|install_dotfiles|req|Install ZSH Dotfiles from repository - (Optional)"
+)
+
+# Destructive steps are never selected by --all
+readonly ALL_EXCLUDED=("remove-snap")
+
+readonly DOTFILES=(
+  ".zshrc"
+  ".p10k.zsh"
+  ".aliases.zsh"
+  ".functions.zsh"
+  ".hooks.zsh"
+  ".plugins.zsh"
+  ".programs.zsh"
+)
+
+readonly REPO_URL="https://github.com/NedcloarBR/dotfiles.git"
+readonly FLATHUB_REPO="https://dl.flathub.org/repo/flathub.flatpakrepo"
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd || true)
+readonly SCRIPT_DIR
+
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+readonly TIMESTAMP
+readonly LOG_FILE="/var/log/dotfiles-install-${TIMESTAMP}.log"
 
 # ==============================================================================
 # GLOBAL VARIABLES
 # ==============================================================================
 
-ACTUAL_USER="${SUDO_USER:-$USER}"
+ACTUAL_USER="${SUDO_USER:-$(id -un)}"
 ACTUAL_HOME=$(getent passwd "$ACTUAL_USER" | cut -d: -f6)
 
-OPTIONS=(
-  "$OPT_UPDATE"
-  "$OPT_REQUIREMENTS"
-  "$OPT_ZSH"
-  "$OPT_DOCKER"
-  "$OPT_QEMU"
-  "$OPT_NODEJS"
-  "$OPT_JAVA"
-  "$OPT_RUST"
-  "$OPT_PYTHON"
-  "$OPT_GHCLI"
-  "$OPT_REMOVE_SNAP"
-  "$OPT_FLATPAK"
-  "$OPT_DOTFILES"
-)
-
-selected=()
+ASSUME_YES=false
+is_selected=()
 current=0
-requirements_installed=false
 
 # ==============================================================================
 # UTILITY FUNCTIONS
@@ -86,7 +98,24 @@ command_exists() {
 
 # Run a command as the actual user (not root)
 run_as_user() {
-  sudo -u "$ACTUAL_USER" "$@"
+  if [[ "$(id -un)" == "$ACTUAL_USER" ]]; then
+    "$@"
+  else
+    sudo -u "$ACTUAL_USER" -H "$@"
+  fi
+}
+
+# Download an installer before running it, so a failed download never runs a partial script
+fetch_script() {
+  curl -fsSL --proto '=https' --tlsv1.2 "$1"
+}
+
+# Run a remote installer as the actual user: run_remote_installer <url> <shell> [args...]
+run_remote_installer() {
+  local url="$1" shell="$2" script
+  shift 2
+  script=$(fetch_script "$url")
+  run_as_user "$shell" -s -- "$@" <<<"$script"
 }
 
 # Detect if running inside WSL
@@ -118,11 +147,15 @@ detect_desktop() {
   fi
 }
 
-# Ask a yes/no question, returns 0 for yes
+# Ask a yes/no question, returns 0 for yes (always yes with --yes)
 confirm() {
   local prompt="$1" choice
+  if [[ "$ASSUME_YES" == true ]]; then
+    log_info "$prompt [y/N]: y (--yes)"
+    return 0
+  fi
   while true; do
-    read -n 1 -p "$prompt [y/N]: " choice
+    read -r -n 1 -p "$prompt [y/N]: " choice
     echo ""
     case "$choice" in
       [Yy]) return 0 ;;
@@ -136,18 +169,72 @@ confirm() {
 restore_terminal() {
   tput cnorm              # Show cursor
   stty sane               # Reset terminal
-  read -r -t 0.1 -n 10000 discard 2>/dev/null || true  # Clear input buffer
+  read -r -t 0.1 -n 10000 _ 2>/dev/null || true  # Clear input buffer
 }
 
-# Ensure requirements are installed before proceeding
-ensure_requirements() {
-  local tool_name="$1"
-  
-  if [[ ! " ${selected[*]} " =~ " $OPT_REQUIREMENTS " ]] && [[ "$requirements_installed" == false ]]; then
-    log_warning "${tool_name} requires 'Requirements'. Installing requirements first..."
-    install_requirements
-    requirements_installed=true
-  fi
+# ==============================================================================
+# STEP HELPERS
+# ==============================================================================
+
+step_field() {
+  local index="$1" field="$2" key fn req label
+  IFS='|' read -r key fn req label <<<"${STEPS[index]}"
+  case "$field" in
+    key) echo "$key" ;;
+    fn) echo "$fn" ;;
+    req) echo "$req" ;;
+    label) echo "$label" ;;
+  esac
+}
+
+step_index() {
+  local i
+  for i in "${!STEPS[@]}"; do
+    [[ "$(step_field "$i" key)" == "$1" ]] && { echo "$i"; return 0; }
+  done
+  return 1
+}
+
+selected_count() {
+  local i count=0
+  for i in "${!STEPS[@]}"; do
+    [[ "${is_selected[i]}" == true ]] && ((count++)) || true
+  done
+  echo "$count"
+}
+
+select_all() {
+  local i key
+  for i in "${!STEPS[@]}"; do
+    key=$(step_field "$i" key)
+    [[ " ${ALL_EXCLUDED[*]} " == *" $key "* ]] || is_selected[i]=true
+  done
+}
+
+select_keys() {
+  local keys key index
+  IFS=',' read -ra keys <<<"$1"
+  for key in "${keys[@]}"; do
+    if ! index=$(step_index "$key"); then
+      log_error "Unknown step: '$key' (see --list)"
+      exit 1
+    fi
+    is_selected[index]=true
+  done
+}
+
+# Selecting a step that needs 'requirements' selects it too
+add_required_steps() {
+  local i req_index
+  req_index=$(step_index requirements)
+  [[ "${is_selected[req_index]}" == true ]] && return
+  for i in "${!STEPS[@]}"; do
+    if [[ "${is_selected[i]}" == true && "$(step_field "$i" req)" == req ]]; then
+      log_warning "Selected steps need 'requirements' - adding it"
+      is_selected[req_index]=true
+      return
+    fi
+  done
 }
 
 # ==============================================================================
@@ -156,7 +243,7 @@ ensure_requirements() {
 
 draw_menu() {
   tput clear
-  
+
   # Header
   echo -e "${BOLD}${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
   echo -e "${BOLD}${CYAN}║           Linux Dotfiles Installation Script                   ║${NC}"
@@ -166,51 +253,40 @@ draw_menu() {
   echo ""
 
   # Options
-  for i in "${!OPTIONS[@]}"; do
-    local prefix="   "
-    local checkbox="[ ]"
-    local color=""
-    
-    # Highlight current option
+  local i prefix checkbox color label
+  for i in "${!STEPS[@]}"; do
+    prefix="   "
+    checkbox="[ ]"
+    color=""
+    label=$(step_field "$i" label)
+
     if [[ $i -eq $current ]]; then
       prefix="->"
       color="${CYAN}"
     fi
-    
-    # Mark selected options
-    if [[ " ${selected[*]} " =~ " ${OPTIONS[i]} " ]]; then
+
+    if [[ "${is_selected[i]}" == true ]]; then
       checkbox="[x]"
       color="${GREEN}"
     fi
-    
-    # Current + selected
-    if [[ $i -eq $current ]] && [[ " ${selected[*]} " =~ " ${OPTIONS[i]} " ]]; then
-      color="${GREEN}"
-    fi
-    
+
     if [[ -n "$color" ]]; then
-      echo -e "${color}${prefix} ${checkbox} ${OPTIONS[i]}${NC}"
+      echo -e "${color}${prefix} ${checkbox} ${label}${NC}"
     else
-      echo "${prefix} ${checkbox} ${OPTIONS[i]}"
+      echo "${prefix} ${checkbox} ${label}"
     fi
   done
-  
+
   # Footer
   echo ""
-  echo -e "${YELLOW}Selected: ${#selected[@]} option(s)${NC}"
+  echo -e "${YELLOW}Selected: $(selected_count) option(s)${NC}"
 }
 
 toggle_selection() {
-  if [[ " ${selected[*]} " =~ " ${OPTIONS[current]} " ]]; then
-    # Remove from selected
-    local new_selected=()
-    for item in "${selected[@]}"; do
-      [[ "$item" != "${OPTIONS[current]}" ]] && new_selected+=("$item")
-    done
-    selected=("${new_selected[@]}")
+  if [[ "${is_selected[current]}" == true ]]; then
+    is_selected[current]=false
   else
-    # Add to selected
-    selected+=("${OPTIONS[current]}")
+    is_selected[current]=true
   fi
 }
 
@@ -221,16 +297,16 @@ navigate_up() {
 }
 
 navigate_down() {
-  if [[ $current -lt $((${#OPTIONS[@]} - 1)) ]]; then
+  if [[ $current -lt $((${#STEPS[@]} - 1)) ]]; then
     ((current++)) || true
   fi
 }
 
 handle_input() {
   local key k1 k2
-  
+
   IFS= read -rsn1 key 2>/dev/null || true
-  
+
   # Handle escape sequences (arrow keys)
   if [[ "$key" == $'\x1b' ]]; then
     read -rsn1 -t 0.1 k1 2>/dev/null || true
@@ -245,7 +321,7 @@ handle_input() {
     '[A' | 'k') navigate_up; return 0 ;;
     '[B' | 'j') navigate_down; return 0 ;;
   esac
-  
+
   return 0
 }
 
@@ -255,80 +331,119 @@ handle_input() {
 
 install_update() {
   log_info "Updating system packages..."
-  apt update -y && apt upgrade -y
+  apt-get update -y
+  apt-get upgrade -y
   log_success "System was updated!"
 }
 
 install_requirements() {
   log_info "Installing requirements..."
-  apt install build-essential dkms gcc wget make zip unzip git curl -y
+  apt-get update -y
+  apt-get install -y build-essential dkms gcc wget make zip unzip git curl ca-certificates
   log_success "Requirements were installed!"
+}
+
+clone_if_missing() {
+  local url="$1" dest="$2"
+  if [[ -d "$dest" ]]; then
+    log_info "$(basename "$dest") already installed - skipping"
+    return 0
+  fi
+  run_as_user git clone --depth=1 --quiet "$url" "$dest"
 }
 
 install_zsh() {
   log_info "Installing ZSH and plugins..."
-  apt install zsh -y
-  
-  # Set ZSH as default shell for the actual user
-  chsh -s "$(which zsh)" "$ACTUAL_USER"
-  
-  run_as_user sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-  
+  apt-get install -y zsh
+
+  chsh -s "$(command -v zsh)" "$ACTUAL_USER"
+
+  if [[ -d "${ACTUAL_HOME}/.oh-my-zsh" ]]; then
+    log_info "Oh My Zsh already installed - skipping"
+  else
+    run_remote_installer "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh" sh --unattended
+  fi
+
   local zsh_custom="${ACTUAL_HOME}/.oh-my-zsh/custom"
-  
-  # Install plugins and theme in parallel
-  run_as_user git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$zsh_custom/themes/powerlevel10k" &
-  run_as_user git clone https://github.com/zsh-users/zsh-autosuggestions "$zsh_custom/plugins/zsh-autosuggestions" &
-  run_as_user git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$zsh_custom/plugins/zsh-syntax-highlighting" &
-  run_as_user git clone https://github.com/zsh-users/zsh-completions "$zsh_custom/plugins/zsh-completions" &
-  wait
-  
+  local -A repos=(
+    ["themes/powerlevel10k"]="https://github.com/romkatv/powerlevel10k.git"
+    ["plugins/zsh-autosuggestions"]="https://github.com/zsh-users/zsh-autosuggestions.git"
+    ["plugins/zsh-syntax-highlighting"]="https://github.com/zsh-users/zsh-syntax-highlighting.git"
+    ["plugins/zsh-completions"]="https://github.com/zsh-users/zsh-completions.git"
+  )
+
+  local path pid failed=false
+  local -A pids=()
+  for path in "${!repos[@]}"; do
+    clone_if_missing "${repos[$path]}" "$zsh_custom/$path" &
+    pids[$path]=$!
+  done
+
+  for path in "${!pids[@]}"; do
+    pid="${pids[$path]}"
+    if ! wait "$pid"; then
+      log_error "Failed to clone $path"
+      failed=true
+    fi
+  done
+  if [[ "$failed" == true ]]; then
+    return 1
+  fi
+
   log_success "ZSH + Plugins & Theme were installed!"
   log_info "Please restart your terminal or run 'zsh' to start using ZSH"
 }
 
 install_nvm() {
   log_info "Fetching latest NVM version..."
-  
+
   local nvm_version
-  nvm_version=$(curl -s https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-  
+  nvm_version=$(curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+
   if [[ -z "$nvm_version" ]]; then
-    log_warning "Could not fetch latest version, using fallback v0.40.1"
-    nvm_version="v0.40.1"
+    log_warning "Could not fetch latest version, using fallback v0.40.3"
+    nvm_version="v0.40.3"
   fi
-  
+
   log_info "Installing NVM ${nvm_version}..."
-  run_as_user bash -c "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh | bash"
-  
-  log_success "NVM ${nvm_version} was installed!"
-  log_info "Run 'source ~/.bashrc' or restart terminal, then use 'nvm install --lts'"
+  run_remote_installer "https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh" bash
+
+  log_info "Installing Node LTS..."
+  # shellcheck disable=SC2016
+  run_as_user bash -c 'export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm install --lts'
+
+  log_success "NVM ${nvm_version} + Node LTS were installed!"
+  log_info "Restart your terminal to start using node"
 }
 
 install_sdkman() {
   log_info "Installing SDKMan! (Java Version Manager) - Latest version..."
-  run_as_user bash -c 'curl -s "https://get.sdkman.io?rcupdate=false" | bash'
-  
+  run_remote_installer "https://get.sdkman.io?rcupdate=false" bash
+
   log_success "SDKMan! was installed!"
   log_info "Run 'source ~/.sdkman/bin/sdkman-init.sh' or restart terminal"
 }
 
 install_rust() {
-  log_info "Installing Rust and Cargo (Latest stable)..."
-  run_as_user bash -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable'
-  
   log_info "Installing Rust dependencies..."
-  apt install libssl-dev pkg-config -y
-  
-  log_info "Installing Cargo plugins (latest versions)..."
-  run_as_user bash -c 'source "$HOME/.cargo/env" && cargo install cargo-watch cargo-modules cargo-nextest cargo-make cargo-release cargo-edit cargo-audit cargo-tarpaulin'
-  
+  apt-get install -y libssl-dev pkg-config
+
+  log_info "Installing Rust and Cargo (Latest stable)..."
+  run_remote_installer "https://sh.rustup.rs" sh -y --default-toolchain stable
+
+  log_info "Installing cargo-binstall..."
+  run_remote_installer "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh" bash
+
+  log_info "Installing Cargo plugins (prebuilt binaries)..."
+  # shellcheck disable=SC2016
+  run_as_user bash -c '. "$HOME/.cargo/env" && cargo binstall --no-confirm cargo-watch cargo-modules cargo-nextest cargo-make cargo-release cargo-edit cargo-audit cargo-tarpaulin'
+
   log_success "Rust + Cargo Plugins were installed!"
 }
 
 install_uv() {
   log_info "Installing uv (Latest version)..."
-  run_as_user env UV_NO_MODIFY_PATH=1 sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+  run_remote_installer "https://astral.sh/uv/install.sh" sh --no-modify-path
 
   log_info "Installing latest Python via uv..."
   run_as_user "${ACTUAL_HOME}/.local/bin/uv" python install
@@ -344,71 +459,78 @@ install_github_cli() {
   fi
 
   log_info "Installing GitHub CLI (Latest version)..."
-  
+
   # Add GitHub CLI repository
-  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+  install -d -m 0755 /usr/share/keyrings
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg
   chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-  
-  # Install GitHub CLI
-  apt update
-  apt install gh -y
-  
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list
+
+  apt-get update -y
+  apt-get install -y gh
+
   log_success "GitHub CLI was installed!"
   log_info "Run 'gh auth login' to authenticate with your GitHub account"
 }
 
-install_dotfiles() {
-  log_info "Installing ZSH dotfiles from repository..."
-  
-  local tmp_dir="/tmp/dotfiles-install-$$"
-  local repo_url="https://github.com/NedcloarBR/dotfiles.git"
-  
-  # Clone repository to temp directory
-  log_info "Cloning repository..."
-  run_as_user git clone --depth=1 "$repo_url" "$tmp_dir"
-  
-  if [[ ! -d "$tmp_dir/Linux" ]]; then
-    log_error "Could not find Linux directory in repository"
+# Prints the directory holding the dotfiles: this script's folder, or a fresh clone
+dotfiles_source() {
+  if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/.zshrc" ]]; then
+    log_info "Using dotfiles from local repository: $SCRIPT_DIR" >&2
+    echo "$SCRIPT_DIR"
+    return
+  fi
+
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  chown "$ACTUAL_USER" "$tmp_dir"
+  log_info "Cloning repository..." >&2
+  run_as_user git clone --depth=1 --quiet "$REPO_URL" "$tmp_dir/repo"
+
+  if [[ ! -d "$tmp_dir/repo/Linux" ]]; then
+    log_error "Could not find Linux directory in repository" >&2
     rm -rf "$tmp_dir"
     return 1
   fi
-  
-  # Copy dotfiles to user's home directory
-  log_info "Copying dotfiles to ${ACTUAL_HOME}..."
-  
-  local dotfiles=(
-    ".zshrc"
-    ".p10k.zsh"
-    ".aliases.zsh"
-    ".functions.zsh"
-    ".hooks.zsh"
-    ".plugins.zsh"
-    ".programs.zsh"
-  )
-  
-  for dotfile in "${dotfiles[@]}"; do
-    if [[ -f "$tmp_dir/Linux/$dotfile" ]]; then
-      # Backup existing file if it exists
-      if [[ -f "${ACTUAL_HOME}/$dotfile" ]]; then
-        log_warning "Backing up existing $dotfile to ${dotfile}.backup"
-        run_as_user mv "${ACTUAL_HOME}/$dotfile" "${ACTUAL_HOME}/${dotfile}.backup"
-      fi
-      
-      # Copy new dotfile
-      run_as_user cp "$tmp_dir/Linux/$dotfile" "${ACTUAL_HOME}/$dotfile"
-      log_info "Installed $dotfile"
-    else
+  echo "$tmp_dir/repo/Linux"
+}
+
+install_dotfiles() {
+  log_info "Installing ZSH dotfiles..."
+
+  local source_dir
+  source_dir=$(dotfiles_source)
+  if [[ "$source_dir" != "$SCRIPT_DIR" ]]; then
+    # shellcheck disable=SC2064
+    trap "rm -rf '${source_dir%/repo/Linux}'" EXIT
+  fi
+
+  local dotfile src dest
+  for dotfile in "${DOTFILES[@]}"; do
+    src="$source_dir/$dotfile"
+    dest="${ACTUAL_HOME}/$dotfile"
+
+    if [[ ! -f "$src" ]]; then
       log_warning "$dotfile not found in repository"
+      continue
     fi
+
+    if [[ -f "$dest" ]] && cmp -s "$src" "$dest"; then
+      log_info "$dotfile is up to date"
+      continue
+    fi
+
+    if [[ -f "$dest" ]]; then
+      log_warning "Backing up existing $dotfile to ${dotfile}.backup-${TIMESTAMP}"
+      run_as_user mv "$dest" "${dest}.backup-${TIMESTAMP}"
+    fi
+
+    run_as_user cp "$src" "$dest"
+    log_info "Installed $dotfile"
   done
-  
-  # Clean up temporary directory
-  log_info "Cleaning up temporary files..."
-  rm -rf "$tmp_dir"
-  
+
   log_success "Dotfiles were installed!"
-  log_info "Backup files were created with .backup extension"
   log_info "Please restart your terminal or run 'source ~/.zshrc' to apply changes"
 }
 
@@ -425,20 +547,20 @@ install_qemu() {
   fi
 
   log_info "Installing QEMU, KVM and Virtual Machine Manager..."
-  
-  apt install qemu-kvm qemu-system qemu-utils libvirt-daemon-system libvirt-clients bridge-utils -y
-  apt install virt-manager virt-viewer -y
-  apt install ovmf swtpm swtpm-tools -y
-  
+
+  apt-get install -y qemu-kvm qemu-system qemu-utils libvirt-daemon-system libvirt-clients bridge-utils
+  apt-get install -y virt-manager virt-viewer
+  apt-get install -y ovmf swtpm swtpm-tools
+
   usermod -aG libvirt "$ACTUAL_USER"
   usermod -aG kvm "$ACTUAL_USER"
-  
+
   systemctl enable libvirtd
   systemctl start libvirtd
-  
+
   virsh net-autostart default 2>/dev/null || true
   virsh net-start default 2>/dev/null || true
-  
+
   log_success "QEMU + Virtual Machine Manager were installed!"
   log_info "Please log out and log back in for group changes to take effect"
   log_info "Launch 'virt-manager' to start creating VMs"
@@ -467,18 +589,20 @@ prompt_docker_wsl() {
   echo -e "${CYAN}Please get Docker Desktop from https://www.docker.com/products/docker-desktop/${NC}"
   echo ""
 
-  while true; do
-    read -n 1 -p "Continue with Linux Docker installation anyway? [y/n]: " choice
-    echo ""
-    case "$choice" in
-      [Yy]) install_docker_engine; return ;;
-      [Nn]) log_info "Docker installation canceled"; return ;;
-      *)    log_warning "Please enter 'y' or 'n'" ;;
-    esac
-  done
+  if confirm "Continue with Linux Docker installation anyway?"; then
+    install_docker_engine
+  else
+    log_info "Docker installation canceled"
+  fi
 }
 
 prompt_docker_type() {
+  if [[ "$ASSUME_YES" == true ]]; then
+    log_info "Installing Docker Engine (default with --yes)"
+    install_docker_engine
+    return
+  fi
+
   echo ""
   echo -e "${BOLD}${CYAN}Choose Docker installation type:${NC}"
   echo ""
@@ -493,8 +617,9 @@ prompt_docker_type() {
   echo -e "  ${RED}3)${NC} Cancel installation"
   echo ""
 
+  local choice
   while true; do
-    read -n 1 -p "Select option [1/2/3]: " choice
+    read -r -n 1 -p "Select option [1/2/3]: " choice
     echo ""
     case "$choice" in
       1) install_docker_engine; return ;;
@@ -507,55 +632,52 @@ prompt_docker_type() {
 
 install_docker_engine() {
   log_info "Installing Docker Engine..."
-  
-  curl -fsSL https://get.docker.com | bash
-  
+
+  local script
+  script=$(fetch_script "https://get.docker.com")
+  sh -s <<<"$script"
+
   groupadd docker 2>/dev/null || true
   usermod -aG docker "$ACTUAL_USER"
-  
+
   if [[ -d "${ACTUAL_HOME}/.docker" ]]; then
     chown "$ACTUAL_USER":"$ACTUAL_USER" "${ACTUAL_HOME}/.docker" -R
     chmod g+rwx "${ACTUAL_HOME}/.docker" -R
   fi
-  
+
   systemctl enable docker.service
   systemctl enable containerd.service
-  
+
   log_success "Docker Engine was installed!"
   log_info "Please log out and log back in for group changes to take effect"
 }
 
 install_docker_desktop() {
-  log_info "Preparing Docker Desktop installation..."
-  
-  apt install gnome-terminal -y 2>/dev/null || apt install xterm -y 2>/dev/null || true
-  
   local arch
   arch=$(dpkg --print-architecture)
-  
+
   if [[ "$arch" != "amd64" ]]; then
     log_error "Docker Desktop only supports amd64 architecture. Your architecture: $arch"
     log_info "Falling back to Docker Engine..."
     install_docker_engine
     return
   fi
-  
-  local deb_file="/tmp/docker-desktop.deb"
-  
+
+  log_info "Preparing Docker Desktop installation..."
+  apt-get install -y gnome-terminal 2>/dev/null || apt-get install -y xterm 2>/dev/null || true
+
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp_dir'" EXIT
+  local deb_file="$tmp_dir/docker-desktop.deb"
+
   log_info "Downloading Docker Desktop (this may take a while)..."
   curl -fsSL "https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb" -o "$deb_file"
-  
-  if [[ ! -f "$deb_file" ]]; then
-    log_error "Failed to download Docker Desktop"
-    log_info "Please download manually from: https://www.docker.com/products/docker-desktop/"
-    return
-  fi
-  
+
   log_info "Installing Docker Desktop..."
-  apt install "$deb_file" -y
-  
-  rm -f "$deb_file"
-  
+  apt-get install -y "$deb_file"
+
   log_success "Docker Desktop was installed!"
   log_info "Launch Docker Desktop from your application menu"
   log_info "You may need to log out and log back in for changes to take effect"
@@ -577,7 +699,7 @@ remove_all_snaps() {
     [[ ${#snaps[@]} -eq 0 ]] && break
 
     for snap_name in "${snaps[@]}"; do
-      log_info "Removing snap: ${snap_name}"
+      log_info "Removing snap: ${snap_name} (pass ${pass})"
       snap remove --purge "$snap_name" &>/dev/null || true
     done
   done
@@ -617,8 +739,8 @@ Pin: origin packages.mozilla.org
 Pin-Priority: 1000
 EOF
 
-  apt update
-  apt install firefox -y
+  apt-get update -y
+  apt-get install -y firefox
 
   log_success "Firefox (deb) was installed from the Mozilla repository!"
 }
@@ -649,10 +771,12 @@ remove_snap() {
 
   # Ubuntu ships Firefox/Thunderbird only as snaps
   local install_firefox=false
-  if is_ubuntu && snap list firefox &>/dev/null; then
+  if is_ubuntu && command_exists snap && snap list firefox &>/dev/null; then
     echo ""
     log_warning "Firefox on Ubuntu is a snap and will be removed."
-    confirm "Install Firefox as a native deb (Mozilla repository) afterwards?" && install_firefox=true
+    if confirm "Install Firefox as a native deb (Mozilla repository) afterwards?"; then
+      install_firefox=true
+    fi
   fi
 
   remove_all_snaps
@@ -668,8 +792,8 @@ remove_snap() {
   done < <(mount | awk '$3 ~ "^/snap" { print $3 }' | sort -r)
 
   log_info "Purging snapd package..."
-  apt purge snapd -y &>/dev/null || true
-  apt autoremove --purge -y &>/dev/null || true
+  apt-get purge -y snapd &>/dev/null || true
+  apt-get autoremove --purge -y &>/dev/null || true
 
   log_info "Removing leftover snap directories..."
   rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd /root/snap
@@ -677,7 +801,9 @@ remove_snap() {
 
   block_snapd_reinstall
 
-  [[ "$install_firefox" == true ]] && install_firefox_deb
+  if [[ "$install_firefox" == true ]]; then
+    install_firefox_deb
+  fi
 
   log_success "Snap was completely removed!"
   log_info "To undo the block: sudo apt-mark unhold snapd && sudo rm /etc/apt/preferences.d/nosnap.pref"
@@ -687,8 +813,6 @@ remove_snap() {
 # Flatpak Installation
 # ------------------------------------------------------------------------------
 
-readonly FLATHUB_REPO="https://dl.flathub.org/repo/flathub.flatpakrepo"
-
 install_flatpak_store() {
   local desktop
   desktop=$(detect_desktop)
@@ -697,14 +821,14 @@ install_flatpak_store() {
     gnome)
       log_info "GNOME detected - installing GNOME Software with Flatpak support..."
       # On Ubuntu the App Center is a snap; the deb GNOME Software replaces it
-      apt install gnome-software gnome-software-plugin-flatpak -y
+      apt-get install -y gnome-software gnome-software-plugin-flatpak
       if is_ubuntu; then
         log_success "GNOME Software (Ubuntu store) now lists Flatpak applications!"
       fi
       ;;
     kde)
       log_info "KDE detected - installing Discover with Flatpak support..."
-      apt install plasma-discover plasma-discover-backend-flatpak -y
+      apt-get install -y plasma-discover plasma-discover-backend-flatpak
       log_success "Discover now lists Flatpak applications!"
       ;;
     *)
@@ -717,17 +841,20 @@ install_flatpak_store() {
 install_flatpak() {
   if is_wsl; then
     log_warning "WSL DETECTED: Flatpak GUI apps require a working WSLg setup."
-    confirm "Continue with Flatpak installation anyway?" || { log_info "Flatpak installation canceled"; return; }
+    if ! confirm "Continue with Flatpak installation anyway?"; then
+      log_info "Flatpak installation canceled"
+      return
+    fi
   fi
 
   log_info "Installing Flatpak..."
-  apt install flatpak -y
+  apt-get install -y flatpak
 
   log_info "Adding Flathub remote (system-wide)..."
   flatpak remote-add --if-not-exists flathub "$FLATHUB_REPO"
 
   log_info "Adding Flathub remote (user)..."
-  run_as_user env HOME="$ACTUAL_HOME" flatpak remote-add --user --if-not-exists flathub "$FLATHUB_REPO" || true
+  run_as_user flatpak remote-add --user --if-not-exists flathub "$FLATHUB_REPO" || true
 
   if ! is_wsl; then
     install_flatpak_store
@@ -742,140 +869,168 @@ install_flatpak() {
 # MAIN EXECUTION
 # ==============================================================================
 
+print_summary() {
+  local -n ok_steps="$1" failed_steps="$2"
+  local step
+
+  echo ""
+  echo -e "${BOLD}${CYAN}Summary${NC}"
+  for step in "${ok_steps[@]}"; do
+    echo -e "  ${GREEN}✔${NC} $step"
+  done
+  for step in "${failed_steps[@]}"; do
+    echo -e "  ${RED}✘${NC} $step"
+  done
+  echo ""
+  log_info "Full log: $LOG_FILE"
+}
+
 run_selected_installations() {
-  if [[ ${#selected[@]} -eq 0 ]]; then
+  if [[ "$(selected_count)" -eq 0 ]]; then
     log_warning "No options selected. Exiting..."
-    return
+    return 0
   fi
 
-  echo -e "\n${BOLD}${CYAN}Starting installation...${NC}\n"
-  
-  # Iterate in menu order, not selection order, to keep dependencies consistent
-  for option in "${OPTIONS[@]}"; do
-    [[ " ${selected[*]} " =~ " $option " ]] || continue
+  exec > >(tee -a "$LOG_FILE") 2>&1
 
-    case "$option" in
-      "$OPT_UPDATE")
-        install_update
-        ;;
-      "$OPT_REQUIREMENTS")
-        if [[ "$requirements_installed" == false ]]; then
-          install_requirements
-          requirements_installed=true
-        fi
-        ;;
-      "$OPT_ZSH")
-        install_zsh
-        ;;
-      "$OPT_DOCKER")
-        ensure_requirements "Docker"
-        install_docker
-        ;;
-      "$OPT_QEMU")
-        install_qemu
-        ;;
-      "$OPT_NODEJS")
-        ensure_requirements "NVM"
-        install_nvm
-        ;;
-      "$OPT_JAVA")
-        ensure_requirements "SDKMan"
-        install_sdkman
-        ;;
-      "$OPT_RUST")
-        ensure_requirements "Rust"
-        install_rust
-        ;;
-      "$OPT_PYTHON")
-        ensure_requirements "uv"
-        install_uv
-        ;;
-      "$OPT_GHCLI")
-        install_github_cli
-        ;;
-      "$OPT_REMOVE_SNAP")
-        remove_snap
-        ;;
-      "$OPT_FLATPAK")
-        install_flatpak
-        ;;
-      "$OPT_DOTFILES")
-        install_dotfiles
-        ;;
-    esac
+  add_required_steps
+
+  echo -e "\n${BOLD}${CYAN}Starting installation...${NC}\n"
+
+  local i key fn status succeeded=() failed=()
+  for i in "${!STEPS[@]}"; do
+    [[ "${is_selected[i]}" == true ]] || continue
+    key=$(step_field "$i" key)
+    fn=$(step_field "$i" fn)
+
+    echo -e "\n${BOLD}==> ${key}${NC}"
+
+    # Subshell with errexit isolates each step; it must not run inside if/||/&&,
+    # where bash silently disables errexit for everything it calls
+    set +e
+    (set -e; "$fn")
+    status=$?
+    set -e
+
+    if [[ $status -eq 0 ]]; then
+      succeeded+=("$key")
+    else
+      log_error "Step '$key' failed - continuing with the next steps"
+      failed+=("$key")
+    fi
   done
-  
-  echo ""
+
+  print_summary succeeded failed
+
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    log_error "${#failed[@]} step(s) failed"
+    return 1
+  fi
   log_success "All selected installations completed!"
 }
 
+usage() {
+  cat <<EOF
+Usage: sudo $0 [options]
+
+Without options, an interactive menu is shown.
+
+Options:
+  --all             Run every step except: ${ALL_EXCLUDED[*]}
+  --only <steps>    Run only the given comma-separated steps (e.g. zsh,uv,dotfiles)
+  -y, --yes         Answer yes to every prompt (Docker defaults to Engine)
+  --list            List available steps
+  -h, --help        Show this help
+EOF
+}
+
+list_steps() {
+  local i
+  for i in "${!STEPS[@]}"; do
+    printf "  %-14s %s\n" "$(step_field "$i" key)" "$(step_field "$i" label)"
+  done
+}
+
+# Sets RUN_MODE to "menu" or "batch"
+parse_args() {
+  local mode="menu"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all) select_all; mode="batch" ;;
+      --only)
+        [[ $# -ge 2 ]] || { log_error "--only requires a value"; exit 1; }
+        select_keys "$2"; mode="batch"; shift ;;
+      --only=*) select_keys "${1#--only=}"; mode="batch" ;;
+      -y | --yes) ASSUME_YES=true ;;
+      --list) list_steps; exit 0 ;;
+      -h | --help) usage; exit 0 ;;
+      *) log_error "Unknown option: $1"; usage; exit 1 ;;
+    esac
+    shift
+  done
+  RUN_MODE="$mode"
+}
+
+run_menu() {
+  tput civis
+  trap 'restore_terminal' EXIT INT TERM
+
+  local exit_code
+  while true; do
+    draw_menu
+
+    set +e
+    handle_input
+    exit_code=$?
+    set -e
+
+    [[ $exit_code -eq 0 ]] && continue
+
+    restore_terminal
+    tput clear
+
+    if [[ $exit_code -eq 2 ]]; then
+      log_info "Exiting without running any commands."
+      return 0
+    fi
+
+    local status
+    set +e
+    run_selected_installations
+    status=$?
+    set -e
+    echo ""
+    echo -e "${YELLOW}Press any key to exit...${NC}"
+    read -r -n 1 -s
+    return "$status"
+  done
+}
+
 main() {
-  # Check root privileges
+  local i
+  for i in "${!STEPS[@]}"; do
+    is_selected[i]=false
+  done
+
+  RUN_MODE="menu"
+  parse_args "$@"
+
   if [[ $EUID -ne 0 ]]; then
     log_error "This script must be run as root (sudo)"
     echo -e "Usage: ${CYAN}sudo $0${NC}"
     exit 1
   fi
 
-  # Check system architecture
-  local arch
-  arch=$(uname -m)
-  
-  case "$arch" in
-    x86_64|amd64)
-      # Supported architectures
-      ;;
-    aarch64|arm64|armv7l|armv8*)
-      log_error "This script does not support ARM/AARCH64 architecture"
-      log_error "Your architecture: $arch"
-      log_info "Please install tools manually or use architecture-specific installation methods"
-      exit 1
-      ;;
-    *)
-      log_warning "Unsupported or unknown architecture: $arch"
-      log_warning "This script is designed for x86_64/amd64 systems"
-      echo ""
-      read -n 1 -p "Continue anyway? [y/N]: " choice
-      echo ""
-      case "$choice" in
-        [Yy]) log_info "Continuing installation at your own risk..." ;;
-        *) log_info "Installation canceled"; exit 1 ;;
-      esac
-      ;;
-  esac
+  if [[ -z "$ACTUAL_HOME" ]]; then
+    log_error "Could not resolve the home directory of '$ACTUAL_USER'"
+    exit 1
+  fi
 
-  # Setup terminal
-  tput civis
-  trap 'restore_terminal' EXIT INT TERM
-  
-  # Main loop - temporarily disable errexit for handle_input
-  set +e
-  while true; do
-    draw_menu
-    
-    handle_input
-    local exit_code=$?
-    
-    if [[ $exit_code -ne 0 ]]; then
-      set -e
-      restore_terminal
-      tput clear
-      
-      if [[ $exit_code -eq 1 ]]; then
-        # Enter pressed - run installations
-        run_selected_installations
-        echo ""
-        echo -e "${YELLOW}Press any key to exit...${NC}"
-        read -n 1 -s -r
-      else
-        # Q pressed - quit
-        log_info "Exiting without running any commands."
-      fi
-      
-      exit 0
-    fi
-  done
+  if [[ "$RUN_MODE" == "batch" ]]; then
+    run_selected_installations
+  else
+    run_menu
+  fi
 }
 
-# Run the script
-main
+main "$@"
